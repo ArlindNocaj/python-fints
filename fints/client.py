@@ -1275,9 +1275,15 @@ class FinTS3PinTanClient(FinTS3Client):
         self.allowed_security_functions = []
         self.selected_security_function = None
         self.selected_tan_medium = tan_medium
-        self.force_twostep_tan = set(force_twostep_tan) if force_twostep_tan else set()
+        self.force_twostep_tan = set(force_twostep_tan) if force_twostep_tan else self._default_force_twostep_tan(bank_identifier)
         self._bootstrap_mode = True
         super().__init__(bank_identifier=bank_identifier, user_id=user_id, customer_id=customer_id, *args, **kwargs)
+
+    @staticmethod
+    def _default_force_twostep_tan(bank_identifier):
+        if str(bank_identifier) == '76030080':
+            return {'HKCCS', 'HKKAZ', 'HKSAL'}
+        return set()
 
     def _new_dialog(self, lazy_init=False):
         if self.pin is None:

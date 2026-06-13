@@ -85,17 +85,23 @@ class FinTSDialog:
                 retval = self.send(*segments, internal_send=True)
 
                 if tan_seg:
-                    for resp in retval.responses(tan_seg):
-                        if resp.code in ('0030', '3955'):
-                            self.client.init_tan_response = NeedTANResponse(
-                                None,
-                                retval.find_segment_first('HITAN'),
-                                '_continue_dialog_initialization',
-                                self.client.is_challenge_structured(),
-                                False,
-                            )
-                            if resp.code == '3955':
-                                self.client.init_tan_response.decoupled = True
+                    # Some banks (e.g. Consorsbank) attach the login-SCA
+                    # 0030/3955 response to the HKIDN segment instead of the
+                    # HKTAN segment, so check both references.
+                    for ref in (tan_seg, segments[0]):
+                        if self.client.init_tan_response is not None:
+                            break
+                        for resp in retval.responses(ref):
+                            if resp.code in ('0030', '3955'):
+                                self.client.init_tan_response = NeedTANResponse(
+                                    None,
+                                    retval.find_segment_first('HITAN'),
+                                    '_continue_dialog_initialization',
+                                    self.client.is_challenge_structured(),
+                                    False,
+                                )
+                                if resp.code == '3955':
+                                    self.client.init_tan_response.decoupled = True
                                 break
 
                 self.need_init = False

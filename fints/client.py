@@ -56,6 +56,11 @@ DATA_BLOB_MAGIC_RETRY = b'python-fints_RETRY_DATABLOB'
 # ING only accepts one step authentication and only allows reading operations
 ING_BANK_IDENTIFIER = BankIdentifier(country_identifier='280', bank_code='50010517')
 
+# Consorsbank requires these orders to be sent with a two-step TAN envelope even
+# when its BPD does not declare that requirement consistently.
+CONSORSBANK_BANK_CODE = '76030080'
+CONSORSBANK_FORCE_TWOSTEP_TAN = frozenset({'HKCCS', 'HKKAZ', 'HKSAL'})
+
 
 class FinTSOperations(Enum):
     """This enum is used as keys in the 'supported_operations' member of the get_information() response.
@@ -1262,8 +1267,16 @@ class FinTS3PinTanClient(FinTS3Client):
         self.selected_security_function = None
         self.selected_tan_medium = tan_medium
         self.force_twostep_tan = set(force_twostep_tan) if force_twostep_tan else set()
+        if self._is_consorsbank_identifier(bank_identifier):
+            self.force_twostep_tan.update(CONSORSBANK_FORCE_TWOSTEP_TAN)
         self._bootstrap_mode = True
         super().__init__(bank_identifier=bank_identifier, user_id=user_id, customer_id=customer_id, *args, **kwargs)
+
+    @staticmethod
+    def _is_consorsbank_identifier(bank_identifier):
+        if isinstance(bank_identifier, BankIdentifier):
+            return bank_identifier.bank_code == CONSORSBANK_BANK_CODE
+        return str(bank_identifier) == CONSORSBANK_BANK_CODE
 
     def _new_dialog(self, lazy_init=False):
         if self.pin is None:

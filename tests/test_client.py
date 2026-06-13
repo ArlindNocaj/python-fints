@@ -29,6 +29,43 @@ def test_get_information(fints_client):
     assert information["bank"]["name"] == 'Test Bank'
 
 
+def test_consorsbank_defaults_force_twostep_tan_segments():
+    client = FinTS3PinTanClient(
+        '76030080',
+        'test1',
+        '1234',
+        'https://brokerage-hbci.consorsbank.de/hbci',
+        product_id="TEST-123",
+    )
+
+    assert {'HKCCS', 'HKKAZ', 'HKSAL'} <= client.force_twostep_tan
+
+
+def test_consorsbank_preserves_explicit_force_twostep_tan_segments():
+    client = FinTS3PinTanClient(
+        '76030080',
+        'test1',
+        '1234',
+        'https://brokerage-hbci.consorsbank.de/hbci',
+        product_id="TEST-123",
+        force_twostep_tan={'HKPRO'},
+    )
+
+    assert {'HKCCS', 'HKKAZ', 'HKSAL', 'HKPRO'} <= client.force_twostep_tan
+
+
+def test_non_consorsbank_does_not_get_consorsbank_force_twostep_tan_segments():
+    client = FinTS3PinTanClient(
+        '12345678',
+        'test1',
+        '1234',
+        'https://example.invalid/hbci',
+        product_id="TEST-123",
+    )
+
+    assert not {'HKCCS', 'HKKAZ', 'HKSAL'} & client.force_twostep_tan
+
+
 def test_pin_wrong(fints_server):
     client = FinTS3PinTanClient(
         '12345678',

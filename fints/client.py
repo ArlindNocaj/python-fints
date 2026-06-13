@@ -1432,12 +1432,13 @@ class FinTS3PinTanClient(FinTS3Client):
 
                 for resp in response.responses(tan_seg):
                     if resp.code in ('0030', '3955'):
+                        decoupled = any(r.code == '3955' for r in response.responses(tan_seg))
                         return NeedTANResponse(
                             command_seg,
                             response.find_segment_first('HITAN'),
                             resume_func,
                             self.is_challenge_structured(),
-                            resp.code == '3955',
+                            decoupled,
                         )
                     if resp.code.startswith('9'):
                         raise Exception("Error response: {!r}".format(response))
@@ -1539,12 +1540,18 @@ class FinTS3PinTanClient(FinTS3Client):
 
                 for resp in response.responses(tan_seg):
                     if resp.code in ('0030', '3955'):
+                        # Consorsbank returns 0030 together with 3955
+                        # ("Sicherheitsfreigabe erfolgt über anderen Kanal")
+                        # for decoupled app approval. Treat the operation as
+                        # decoupled whenever 3955 is present, regardless of the
+                        # order in which the codes appear.
+                        decoupled = any(r.code == '3955' for r in response.responses(tan_seg))
                         return NeedTANResponse(
                             command_seg,
                             response.find_segment_first('HITAN'),
                             resume_func,
                             self.is_challenge_structured(),
-                            resp.code == '3955',
+                            decoupled,
                             hivpp,
                         )
                     if resp.code.startswith('9'):
@@ -1555,12 +1562,13 @@ class FinTS3PinTanClient(FinTS3Client):
                 # HKTAN segment.  Check command_seg responses as fallback.
                 for resp in response.responses(command_seg):
                     if resp.code in ('0030', '3955'):
+                        decoupled = any(r.code == '3955' for r in response.responses(command_seg))
                         return NeedTANResponse(
                             command_seg,
                             response.find_segment_first('HITAN'),
                             resume_func,
                             self.is_challenge_structured(),
-                            resp.code == '3955',
+                            decoupled,
                             hivpp,
                         )
             else:

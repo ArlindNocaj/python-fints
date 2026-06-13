@@ -1672,7 +1672,7 @@ class FinTS3PinTanClient(FinTS3Client):
                         "No TAN status received."
                     )
                 for resp in response.responses(tan_seg):
-                    if resp.code == '3956':
+                    if resp.code == '3956' or self._is_decoupled_signature_pending(resp):
                         return NeedTANResponse(
                             challenge.command_seg,
                             challenge.tan_request,
@@ -1683,6 +1683,14 @@ class FinTS3PinTanClient(FinTS3Client):
 
             resume_func = getattr(self, challenge.resume_method)
             return resume_func(challenge.command_seg, response)
+
+    @staticmethod
+    def _is_decoupled_signature_pending(response):
+        return (
+            response.code == '9010'
+            and 'Unterschriften' in str(getattr(response, 'text', ''))
+            and 'nicht ausreichend' in str(getattr(response, 'text', ''))
+        )
 
     def _process_response(self, dialog, segment, response):
         if response.code == '3920' and not self.bank_identifier == ING_BANK_IDENTIFIER:
@@ -1705,7 +1713,7 @@ class FinTS3PinTanClient(FinTS3Client):
                     # Fall back to onestep
                     self.set_tan_mechanism('999')
 
-        if response.code == '9010':
+        if response.code == '9010' and not dialog.open:
             raise FinTSClientError("Error during dialog initialization, could not fetch BPD. Please check that you "
                                    "passed the correct bank identifier to the HBCI URL of the correct bank.")
 

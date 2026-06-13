@@ -2,22 +2,34 @@
 """
 Sample: Consorsbank (BLZ 76030080) with python-fints.
 
-Demonstrates fetching accounts/transactions and making a SEPA transfer
-authenticated with the **Consorsbank App** (the current TAN method).
+Demonstrates fetching accounts/transactions and making a SEPA transfer with
+either of Consorsbank's two current TAN methods.
 
-TAN method background
----------------------
-Consorsbank migrated its TAN procedure in 2025:
+TAN methods
+-----------
+Consorsbank advertises two two-step TAN mechanisms:
 
-* The old **SecurePlus App** was decommissioned for FinTS/HBCI. TANs it
-  generates are rejected by the bank with ``9941 TAN ungültig``.
-* TANs must now be produced/approved with the new **Consorsbank App**
-  (TAN mechanism ``901`` "Consorsbank/myPrivateBank App", which the bank
-  advertises with ``zka_id = "Decoupled"``). The physical **SecurePlus TAN
-  generator** device (mechanism ``900``) still works as an alternative.
+* **901 "Consorsbank/myPrivateBank App"** (``zka_id = "Decoupled"``) — the new
+  Consorsbank App. Login asks for a *typed* 9-digit TAN generated in the app;
+  a SEPA transfer is *approved in the app* (decoupled), no TAN is typed.
+* **900 "SecurePlus TAN Generator"** (``zka_id = "photoTAN"``) — login needs no
+  TAN (the bank answers the dialog-init with ``3076``); a SEPA transfer returns
+  an order-bound **photoTAN QR image** (``response.challenge_matrix``) that is
+  scanned, after which the resulting TAN is typed.
 
-Verified end-to-end against Consorsbank with mechanism ``901``: a SEPA
-transfer is accepted and booked.
+Both were exercised end-to-end against Consorsbank. A real SEPA transfer with
+mechanism ``901`` was accepted and booked.
+
+.. note::
+   The old **SecurePlus *App*** (the smartphone app, distinct from the
+   SecurePlus *TAN-generator device*) was shut down for Consorsbank online
+   banking on **2026-04-25**; since then it returns "TAN-Verfahren ungültig"
+   and any TAN it produces — including ones scanned from the ``900`` photoTAN
+   QR — is rejected with ``9941 TAN ungültig``. Use the new **Consorsbank App**
+   (``901``) or the **physical SecurePlus TAN-generator device** (``900``).
+   The ``900`` code path here is correct; only the decommissioned app's TAN is
+   refused by the bank. (Source: kritische-anleger.de SecurePlus-App shutdown
+   report, and the official Consorsbank HBCI FAQ.)
 
 Protocol quirks handled by python-fints (see PR #209 and the login-SCA fix)
 --------------------------------------------------------------------------

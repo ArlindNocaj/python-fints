@@ -874,6 +874,14 @@ class BatchTransferParameter1(DataElementGroup):
     single_booking_allowed = DataElementField(type='jn', _d="Einzelbuchung erlaubt")
 
 
+class ScheduledTransferParameter1(DataElementGroup):
+    """Parameter terminierte SEPA-Überweisung, version 1
+
+    Source: FinTS Financial Transaction Services, Schnittstellenspezifikation, Messages -- Multibankfähige Geschäftsvorfälle """
+    min_advance_days = DataElementField(type='num', max_length=4, _d="Mindestvorlaufzeit")
+    max_advance_days = DataElementField(type='num', max_length=4, _d="Maximaler Vorlauf")
+
+
 @doc_enum
 class ServiceType2(RepresentableEnum):
     T_ONLINE = 1  # doc: T-Online

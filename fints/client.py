@@ -39,7 +39,7 @@ from .segments.dialog import HIRMG2, HIRMS2, HISYN4, HKSYN3
 from .segments.journal import HKPRO3, HKPRO4
 from .segments.saldo import HKSAL5, HKSAL6, HKSAL7
 from .segments.statement import DKKKU2, HKKAZ5, HKKAZ6, HKKAZ7, HKCAZ1, HKKAU2, HKKAU1, HKEKA3, HKEKA4, HKEKA5
-from .segments.transfer import HKCCM1, HKCCS1, HKIPZ1, HKIPM1
+from .segments.transfer import HKCCM1, HKCCS1, HKCSE1, HICSE1, HKIPZ1, HKIPM1
 from .types import SegmentSequence
 from .utils import (
     MT535_Miniparser, Password, SubclassesMixin,
@@ -75,6 +75,7 @@ class FinTSOperations(Enum):
     GET_SCHEDULED_DEBITS_MULTIPLE = ("HKDMB", )
     GET_STATUS_PROTOCOL = ("HKPRO", )
     SEPA_TRANSFER_SINGLE = ("HKCCS", )
+    SEPA_TRANSFER_SINGLE_SCHEDULED = ("HKCSE", )
     SEPA_TRANSFER_MULTIPLE = ("HKCCM", )
     SEPA_DEBIT_SINGLE = ("HKDSE", )
     SEPA_DEBIT_MULTIPLE = ("HKDME", )
@@ -880,6 +881,51 @@ class FinTS3Client:
         xml = sepa.export().decode()
         return self.sepa_transfer(account, xml, pain_descriptor="urn:iso:std:iso:20022:tech:xsd:"+version, instant_payment=instant_payment)
 
+    def simple_scheduled_sepa_transfer(self, account: SEPAAccount, iban: str, bic: str,
+                                       recipient_name: str, amount: Decimal, account_name: str, reason: str,
+                                       execution_date: datetime.date, endtoend_id='NOTPROVIDED'):
+        """
+        Simple scheduled SEPA transfer.
+
+        :param account: SEPAAccount to start the transfer from.
+        :param iban: Recipient's IBAN
+        :param bic: Recipient's BIC (Can be None if domestic)
+        :param recipient_name: Recipient name
+        :param amount: Amount as a ``Decimal``
+        :param account_name: Sender account name
+        :param reason: Transfer reason
+        :param execution_date: Future execution date requested from the bank
+        :param endtoend_id: End-to-end-Id (defaults to ``NOTPROVIDED``)
+        :return: Returns either a NeedRetryResponse or NeedVOPResponse or TransactionResponse
+        """
+        config = {
+            "name": account_name,
+            "IBAN": account.iban,
+            "BIC": account.bic,
+            "batch": False,
+            "currency": "EUR",
+        }
+
+        version = self._find_supported_sepa_version([
+            'pain.001.001.09',
+            'pain.001.001.03'
+        ])
+
+        sepa = SepaTransfer(config, version)
+        payment = {
+            "name": recipient_name,
+            "IBAN": iban,
+            "amount": round(Decimal(amount) * 100),  # in cents
+            "execution_date": execution_date,
+            "description": reason,
+            "endtoend_id": endtoend_id,
+        }
+        if bic:
+            payment["BIC"] = bic
+        sepa.add_payment(payment)
+        xml = sepa.export().decode()
+        return self.scheduled_sepa_transfer(account, xml, pain_descriptor="urn:iso:std:iso:20022:tech:xsd:"+version)
+
     def sepa_transfer(self, account: SEPAAccount, pain_message: str, multiple=False,
                       control_sum=None, currency='EUR', book_as_single=False,
                       pain_descriptor='urn:iso:std:iso:20022:tech:xsd:pain.001.001.03', instant_payment=False):
@@ -932,8 +978,37 @@ class FinTS3Client:
 
             return self._send_pay_with_possible_retry(dialog, seg, self._continue_sepa_transfer)
 
+    def scheduled_sepa_transfer(self, account: SEPAAccount, pain_message: str,
+                                pain_descriptor='urn:iso:std:iso:20022:tech:xsd:pain.001.001.03'):
+        """
+        Custom scheduled SEPA transfer.
+
+        :param account: SEPAAccount to send the transfer from.
+        :param pain_message: SEPA PAIN message containing the transfer details with a future execution date.
+        :param pain_descriptor: URN of the PAIN message schema used.
+        :return: Returns either a NeedRetryResponse or TransactionResponse (with data['order_id'] set if returned by bank)
+        """
+
+        with self._get_dialog() as dialog:
+            self._find_highest_supported_command(
+                HKCSE1,
+                return_parameter_segment=True
+            )
+
+            seg = HKCSE1(
+                account=HKCSE1._fields['account'].type.from_sepa_account(account),
+                sepa_descriptor=pain_descriptor,
+                sepa_pain_message=pain_message.encode(),
+            )
+
+            return self._send_pay_with_possible_retry(dialog, seg, self._continue_sepa_transfer)
+
     def _continue_sepa_transfer(self, command_seg, response):
         retval = TransactionResponse(response)
+
+        for seg in response.find_segments(HICSE1):
+            if seg.order_id:
+                retval.data['order_id'] = seg.order_id
 
         for seg in response.find_segments(HIRMS2):
             for resp in seg.responses:

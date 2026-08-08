@@ -181,6 +181,25 @@ def test_transfer_2step_continue(fints_client):
         assert b.responses[0].text == "Transfer 3.42 to DE111234567800000002 re 'Test transfer 2step'"
 
 
+def test_transfer_2step_continue_preserves_decoupled(fints_client):
+    with fints_client:
+        accounts = fints_client.get_sepa_accounts()
+        challenge = fints_client.simple_sepa_transfer(
+            accounts[0],
+            'DE111234567800000002',
+            'GENODE23X42',
+            'Test Receiver',
+            Decimal('3.42'),
+            'Test Sender',
+            'Test transfer 2step'
+        )
+        challenge.decoupled = True
+
+        restored_challenge = NeedRetryResponse.from_data(challenge.get_data())
+
+        assert restored_challenge.decoupled is True
+
+
 def test_tan_wrong(fints_client):
     with fints_client:
         accounts = fints_client.get_sepa_accounts()

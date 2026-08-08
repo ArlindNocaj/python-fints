@@ -1235,10 +1235,22 @@ class NeedTANResponse(NeedRetryResponse):
         if data["version"] == 1:
             if "init_tan" in data:
                 segs = SegmentSequence(data['segments_bin']).segments
-                return cls(None, segs[0], data['resume_method'], data['tan_request_structured'])
+                return cls(
+                    None,
+                    segs[0],
+                    data['resume_method'],
+                    data['tan_request_structured'],
+                    decoupled=data.get('decoupled', False),
+                )
             else:
                 segs = SegmentSequence(data['segments_bin']).segments
-                return cls(segs[0], segs[1], data['resume_method'], data['tan_request_structured'])
+                return cls(
+                    segs[0],
+                    segs[1],
+                    data['resume_method'],
+                    data['tan_request_structured'],
+                    decoupled=data.get('decoupled', False),
+                )
 
         raise Exception("Wrong blob data version")
 
@@ -1254,6 +1266,7 @@ class NeedTANResponse(NeedRetryResponse):
                 "segments_bin": SegmentSequence([self.command_seg, self.tan_request]).render_bytes(),
                 "resume_method": self.resume_method,
                 "tan_request_structured": self.tan_request_structured,
+                "decoupled": self.decoupled,
             }
         else:
             data = {
@@ -1263,6 +1276,7 @@ class NeedTANResponse(NeedRetryResponse):
                 "segments_bin": SegmentSequence([self.tan_request]).render_bytes(),
                 "resume_method": self.resume_method,
                 "tan_request_structured": self.tan_request_structured,
+                "decoupled": self.decoupled,
             }
         return compress_datablob(DATA_BLOB_MAGIC_RETRY, 1, data)
 

@@ -1566,7 +1566,8 @@ class FinTS3PinTanClient(FinTS3Client):
                     hivpp = response.find_segment_first(HIVPP1, throw=True)
 
                     # Check if VOP polling is required: HIVPP has no vop_id but has polling_id
-                    if not hivpp.vop_id and hivpp.polling_id:
+                    vop_polled = not hivpp.vop_id and bool(hivpp.polling_id)
+                    if vop_polled:
                         # Extract aufsetzpunkt from HIRMS 3040 response
                         aufsetzpunkt = None
                         for hirms_seg in response.find_segments(HIRMS2):
@@ -1599,9 +1600,9 @@ class FinTS3PinTanClient(FinTS3Client):
                     for seg in response.find_segments((HIRMG2, HIRMS2)):
                         all_codes.extend(r.code for r in seg.responses)
 
-                    # If we have a vop_id (from initial or polling), return NeedVOPResponse
-                    # so the caller can inspect the result and then call approve_vop_response
-                    if hivpp.vop_id:
+                    # Polling needs a new authorization round. An immediate full
+                    # match must keep its TAN challenge instead of resubmitting.
+                    if vop_polled and hivpp.vop_id:
                         return NeedVOPResponse(
                             vop_result=hivpp,
                             command_seg=command_seg,

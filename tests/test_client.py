@@ -16,6 +16,81 @@ def fints_client(fints_server):
     )
 
 
+@pytest.mark.parametrize('result_code, confirmation_required, polled', [
+    ('RCVC', False, False),
+    ('RCVC', True, False),
+    ('RCVC', False, True),
+    ('RVNM', False, False),
+    ('RVMC', False, False),
+    ('RVNA', False, False),
+])
+def test_vop_full_match_keeps_existing_tan_challenge(
+    monkeypatch, result_code, confirmation_required, polled
+):
+    from types import SimpleNamespace
+    from fints.client import HIVPP1, NeedVOPResponse
+
+    command = SimpleNamespace(header=SimpleNamespace(type='HKCSE'))
+    tan = object()
+    final_vop = SimpleNamespace(
+        vop_id=b'check-id', polling_id=None,
+        vop_single_result=SimpleNamespace(result=result_code),
+    )
+    initial_vop = SimpleNamespace(
+        vop_id=None, polling_id=b'poll-id', wait_for_seconds=1,
+        vop_single_result=SimpleNamespace(result='PDNG'),
+    ) if polled else final_vop
+    codes = ['3040'] if polled else ['3945'] if confirmation_required else ['3955']
+    replies = [SimpleNamespace(code=code, parameters=['cursor']) for code in codes]
+
+    class Reply:
+        def __init__(self, vop):
+            self.vop = vop
+
+        def find_segment_first(self, kind, throw=False):
+            if kind is HIVPP1:
+                return self.vop
+            return SimpleNamespace(challenge='Approve in the app')
+
+        def responses(self, segment):
+            return replies if segment is tan else []
+
+        def find_segments(self, kinds):
+            return [SimpleNamespace(responses=replies)]
+
+    class Dialog:
+        calls = 0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def send(self, *segments):
+            self.calls += 1
+            return Reply(initial_vop if self.calls == 1 else final_vop)
+
+    client = FinTS3PinTanClient.__new__(FinTS3PinTanClient)
+    client._find_vop_format_for_segment = lambda command: 'sepade.pain.002.001.10.xsd'
+    client._need_twostep_tan_for_segment = lambda command: True
+    client._get_tan_segment = lambda *args: tan
+    client.is_challenge_structured = lambda: False
+    monkeypatch.setattr('time.sleep', lambda seconds: None)
+    dialog = Dialog()
+
+    response = client._send_pay_with_possible_retry(dialog, command, lambda *args: None)
+
+    if result_code == 'RCVC' and not confirmation_required and not polled:
+        assert isinstance(response, NeedTANResponse)
+        assert response.decoupled is True
+        assert response.vop_result is final_vop
+    else:
+        assert isinstance(response, NeedVOPResponse)
+        assert response.vop_result is final_vop
+    assert dialog.calls == (2 if polled else 1)
+
+
 def test_get_sepa_accounts(fints_client):
     with fints_client:
         accounts = fints_client.get_sepa_accounts()
